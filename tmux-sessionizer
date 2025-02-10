@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 switch_to() {
     if [[ -z $TMUX ]]; then
         tmux attach-session -t "$1"
@@ -22,24 +23,39 @@ hydrate() {
 if [[ $# -eq 1 ]]; then
     selected="$1"
 else
-    # If someone wants to make this extensible, I'll accept PR
-    selected=$(find ~/ ~/path/to/documents/ -mindepth 0 -maxdepth 1 -type d | fzf)
+    # Shows directories and tmux sessions
+    selected=$( (
+    find ~/ ~/DocumentosImportantes -mindepth 0 -maxdepth 1 -type d
+    tmux list-sessions | awk -F':' '{print "(tmux ls: "$1")"}'
+    ) | fzf)
 fi
 
+# Exit if the user makes no selection
 if [[ -z $selected ]]; then
     exit 0
 fi
 
-selected_name=$(basename "$selected" | tr . _)
+# Convert the data to a readable one by this script if the user select a tmux ls session
+if [[ $selected == "(tmux ls: "*")" ]]; then
+    selected_name=$(echo "$selected" | sed -E 's/\(tmux ls: (.+)\)/\1/')
+else
+    selected_name=$(basename "$selected" | tr . _)
+fi
+
 tmux_running=$(pgrep tmux)
 
+# If there is no session and tmux is not running
 if [[ -z $TMUX ]] && [[ -z $tmux_running ]]; then
     tmux new-session -s "$selected_name" -c "$selected"
     hydrate "$selected_name" "$selected"
     exit 0
 fi
 
+# Create a session in background
 if ! has_session "$selected_name"; then
     tmux new-session -ds "$selected_name" -c "$selected"
     hydrate "$selected_name" "$selected"
 fi
+
+# Switch to selected tmux session
+switch_to "$selected_name"
